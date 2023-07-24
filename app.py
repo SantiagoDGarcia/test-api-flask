@@ -23,6 +23,10 @@ firebase_manager = FirebaseManager()
 
 
 # Define the route /evaluate-image/<string:type_analisis>/ that accepts POST requests
+@app.route("/", methods=["POST"])
+def index():
+    return "<h2>TEST OK</h2>"
+
 @app.route("/evaluate-image/<string:type_analisis>/", methods=["POST"])
 def evaluate_image(type_analisis: str):
     check_request(type_analisis, app.config["UPLOAD_EXTENSIONS"])
