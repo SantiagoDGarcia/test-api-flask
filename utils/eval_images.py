@@ -16,6 +16,7 @@ class Predict:
         self.device = (
             "cuda" if torch.cuda.is_available() else "cpu"
         )  # Use GPU if available
+        print("device ", self.device)
         self.type_analysis = type_analisis  # Type of analysis to perform
 
     def transform_numpy_to_tensor(self, list_masks: np.ndarray) -> List[torch.Tensor]:
@@ -48,7 +49,7 @@ class Predict:
             # Load the model and set it to evaluation mode
             net_test = model_net.double()
             net_test.eval()
-            checkpoint = torch.load(model_dir)
+            checkpoint = torch.load(model_dir, map_location=torch.device(self.device))
             net_test.load_state_dict(checkpoint["classifier_state"])
 
             # Make a prediction for the given image
@@ -63,7 +64,7 @@ class Predict:
     def get_predictions(self) -> List[str]:
         # Define the path to the model checkpoint based on the type of analysis
         if self.type_analysis == "ultrasound":
-            model_dir = "models/chckp1.pth"
+            model_dir = "models/ultrasound.pth"
         else:
             model_dir = "models/chckp1.pth"
 
