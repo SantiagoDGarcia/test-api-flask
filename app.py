@@ -1,4 +1,5 @@
 from flask import Flask, jsonify, request, abort
+"""
 from utils.create_mask import ExtractMasks
 from utils.eval_images import Predict
 from utils.utils import (
@@ -13,19 +14,21 @@ from utils.firebase_functions import FirebaseManager
 from datetime import datetime
 
 warnings.filterwarnings("ignore", category=UserWarning)
-
+"""
 app = Flask(__name__)
 app.config["MAX_CONTENT_LENGTH"] = 10024 * 10024
 app.config["UPLOAD_EXTENSIONS"] = [".jpg", ".png", ".jpeg"]
 
 # Crear una instancia de FirebaseManager
-firebase_manager = FirebaseManager()
+#firebase_manager = FirebaseManager()
 
 
 # Define the route /evaluate-image/<string:type_analisis>/ that accepts POST requests
 @app.route("/", methods=["POST"])
 def index():
     return "<h2>TEST OK</h2>"
+
+"""
 
 @app.route("/evaluate-image/<string:type_analisis>/", methods=["POST"])
 def evaluate_image(type_analisis: str):
@@ -88,7 +91,7 @@ def evaluate_image(type_analisis: str):
     }
     return jsonify(json_response)
 
-
+"""
 if __name__ == "__main__":
     app.run(
         debug=True,
