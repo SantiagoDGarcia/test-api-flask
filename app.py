@@ -1,5 +1,4 @@
 from flask import Flask, jsonify, request, abort
-"""
 from utils.create_mask import ExtractMasks
 from utils.eval_images import Predict
 from utils.utils import (
@@ -14,7 +13,7 @@ from utils.firebase_functions import FirebaseManager
 from datetime import datetime
 
 warnings.filterwarnings("ignore", category=UserWarning)
-"""
+
 app = Flask(__name__)
 app.config["MAX_CONTENT_LENGTH"] = 10024 * 10024
 app.config["UPLOAD_EXTENSIONS"] = [".jpg", ".png", ".jpeg"]
