@@ -1,4 +1,4 @@
-import torch
+import torch, os
 import torchvision.transforms as transforms
 from torchvision import models
 import torch.nn as nn
@@ -63,10 +63,11 @@ class Predict:
 
     def get_predictions(self) -> List[str]:
         # Define the path to the model checkpoint based on the type of analysis
+        dir = os.path.join(os.getcwd(), 'models')
         if self.type_analysis == "ultrasound":
-            model_dir = "models/ultrasound.pth"
+            model_dir = os.path.join(dir, 'ultrasound.pth')
         else:
-            model_dir = "models/chckp1.pth"
+            model_dir = os.path.join(dir, 'mammography.pth')
 
         # Define a function to create a convolutional layer with the given number of input and output channels
         layer_conv = lambda x, y: nn.Conv2d(

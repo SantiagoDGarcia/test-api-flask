@@ -2,7 +2,7 @@
  this is a adapted code from 
  https://github.com/facebookresearch/segment-anything/
 """
-import cv2
+import cv2, os
 import numpy as np
 import matplotlib.pyplot as plt
 from segment_anything import SamAutomaticMaskGenerator, sam_model_registry
@@ -18,7 +18,10 @@ matplotlib.use("agg")
 class ExtractMasks:
     def __init__(self, img_input_dir: str = None, img_input_file=None) -> None:
         self.img_input_file = img_input_file
-        self.model_dir = "models/sam_vit_b_01ec64.pth"
+        dir = os.path.join(os.getcwd(), 'models')
+        dir = os.path.join(dir, 'sam_vit_b_01ec64.pth')
+        print(dir)
+        self.model_dir = dir
         self.model_type = "vit_b"
 
     def mark_areas(self, anns: np.ndarray, type_bg: str = "color"):
@@ -111,6 +114,7 @@ class ExtractMasks:
     def get_masks(self) -> np.ndarray:
         print("Extrayendo RoI's...")
         image = self.image_to_numpy_array()
+
         sam = sam_model_registry[self.model_type](checkpoint=self.model_dir)
         mask_generator = SamAutomaticMaskGenerator(sam)
         layer_mask = mask_generator.generate(image)
