@@ -1,25 +1,21 @@
-import cv2
+import cv2, config
 import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib
 from PIL import Image
 import matplotlib.image
 from typing import Any, Dict, List, Optional, Tuple
-import json, imghdr
-from flask import request, abort
-import random
-
-"""
-import jwt
-from jwt import PyJWKClient
-"""
+import json, imghdr, random
+from flask import request, abort, jsonify
+from datetime import datetime
 from werkzeug.utils import secure_filename
+
+allowed_extension = config.UPLOAD_EXTENSIONS
 
 
 class NumpyEncoder(json.JSONEncoder):
-    """Special json encoder for numpy types"""
-
     def default(self, obj):
+        # Encode numpy data types as native Python data types for JSON serialization
         if isinstance(obj, np.integer):
             return int(obj)
         elif isinstance(obj, np.floating):
@@ -29,50 +25,50 @@ class NumpyEncoder(json.JSONEncoder):
         return json.JSONEncoder.default(self, obj)
 
 
-def show(img):
-    plt.figure(figsize=(5, 5))
-    plt.imshow(img)
-    # mark_areas(layer_mask, type_bg="gray")
-    plt.axis("off")
-    plt.show()
-
-
-def save_img_png(name, img):
-    matplotlib.image.imsave("mask.png", img, cmap="gray")
-
-
 def convert_numpy_to_list(array: np.ndarray):
+    # Convert numpy array to list using custom JSON encoder
     dumped = json.dumps(array, cls=NumpyEncoder)
     print(type(dumped))
     return dumped
 
 
-def check_request(type_analisis: str, allowed_extension: List) -> None:
-    # if not request.is_secure:
-    # abort(407)
+def check_request(type_analisis: str) -> None:
+    # Check if request is valid and authorized
+    auth_header = request.headers.get("Authorization")
+    if auth_header:
+        auth_scheme, auth_token = auth_header.split()
+        if auth_scheme != "Bearer":
+            abort(401)
+    else:
+        abort(401)
+    # Check if file is present and type_analisis is valid
     if (
         request.files.get("file") is None
         or type_analisis != "ultrasound"
         and type_analisis != "mammography"
     ):
-        abort(404)
+        abort(401)
+    # Check if file has allowed extension
     if not allowed_file(request.files["file"], allowed_extension):
-        abort(400)
+        abort(generate_response("ERROR", "NO FILE ALLOWED"))
 
 
 def allowed_file(file, allowed_extension) -> bool:
+    # Check if file has allowed extension and format
     filename = secure_filename(file.filename)
     stream = file.stream
     extension = "." in filename and filename.rsplit(".", 1)[1].lower()
-
+    # Check file format using imghdr module
     header = stream.read(512)
     stream.seek(0)
     format = imghdr.what(None, header)
-
+    # Normalize format and extension values for comparison
     if not format:
         return False
-    # format = format if format != "jpeg" else "jpg"
-
+    else:
+        format = format if format != "jpeg" else "jpg"
+        extension = extension if extension != "jpeg" else "jpg"
+    # Check if extension and format are allowed and match
     if "." + extension in allowed_extension and extension == format:
         return True
     else:
@@ -80,6 +76,7 @@ def allowed_file(file, allowed_extension) -> bool:
 
 
 def generate_id(length: int):
+    # Generate a random ID of specified length using hex values
     def fragmentName():
         return hex(int((1 + random.random()) * 0x10000))[3:]
 
@@ -96,6 +93,7 @@ def format_data_to_dict(
     original_image: Optional[np.ndarray] = None,
     drawed_image: Optional[np.ndarray] = None,
 ) -> Tuple[Dict[str, Any], Dict[str, Any]]:
+    # Format data as dictionary for uploading to Firestore or storage bucket
     if extract_roi == "true":
         images = {
             "imgUrl": {"path": f"{path}original.png", "image": original_image},
@@ -114,48 +112,38 @@ def format_data_to_dict(
         images = {
             "imgUrl": {"path": f"{path}original.png", "image": data_to_eval[0]},
         }
+
     return images, {}
 
 
-"""
-def verify_app_check(token):
-    if token is None:
-        return None
+def get_data_routes(
+    user_id: str,
+    predictions,
+    type_analisis: str,
+):
+    # Generate data for uploading results to Firestore and storage bucket
+    hist_id = generate_id(3)
+    collection = f"Users/{user_id}/HistResults"
+    current_timestamp = int(datetime.utcnow().timestamp())
+    path = f"results/{user_id}/{hist_id}/"
+    data_doc = {
+        "testResult": "M" if "M" in predictions else "B",
+        "typeAnalysis": type_analisis[0].upper(),
+        "dateAnalysis": current_timestamp,
+        "roiExtracted": False,
+        "isActive": True,
+    }
+    return hist_id, path, collection, data_doc
 
-    # Obtain the Firebase App Check Public Keys
-    # Note: It is not recommended to hard code these keys as they rotate,
-    # but you should cache them for up to 6 hours.
-    url = "https://firebaseappcheck.googleapis.com/v1beta/jwks"
 
-    jwks_client = PyJWKClient(url)
-    signing_key = jwks_client.get_signing_key_from_jwt(token)
-
-    header = jwt.get_unverified_header(token)
-    # Ensure the token's header uses the algorithm RS256
-    if header.get("alg") != "RS256":
-        return None
-    # Ensure the token's header has type JWT
-    if header.get("typ") != "JWT":
-        return None
-
-    payload = {}
-    try:
-        # Verify the signature on the App Check token
-        # Ensure the token is not expired
-        payload = jwt.decode(
-            token,
-            signing_key.key,
-            algorithms=["RS256"],
-            # Ensure the token's audience matches your project
-            audience="projects/" + app.config["PROJECT_NUMBER"],
-            # Ensure the token is issued by App Check
-            issuer="https://firebaseappcheck.googleapis.com/"
-            + app.config["PROJECT_NUMBER"],
-        )
-    except:
-        print(f"Unable to verify the token")
-
-    # The token's subject will be the app ID, you may optionally filter against
-    # an allow list
-    return payload.get("sub")
-"""
+def generate_response(
+    result: str, aditionalInfo: str = None, idResult: Optional[str] = None
+):
+    # Generate a JSON response with the specified result and additional information
+    return jsonify(
+        {
+            "result": result,
+            "aditionalInfo": aditionalInfo,
+            "idResult": idResult,
+        }
+    )

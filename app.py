@@ -1,53 +1,62 @@
+import json, time, uuid, warnings, config
+from flask_cors import CORS, cross_origin
+from datetime import datetime
 from flask import Flask, jsonify, request, abort
-
 from utils.create_mask import ExtractMasks
 from utils.eval_images import Predict
-from utils.utils import (
-    show,
-    convert_numpy_to_list,
-    check_request,
-    generate_id,
-    format_data_to_dict,
-)
-import warnings, json, time, uuid
 from utils.firebase_functions import FirebaseManager
-from datetime import datetime
+from utils.utils import (
+    check_request,
+    convert_numpy_to_list,
+    format_data_to_dict,
+    get_data_routes,
+    generate_response,
+)
 
 warnings.filterwarnings("ignore", category=UserWarning)
 
 app = Flask(__name__)
-app.config["MAX_CONTENT_LENGTH"] = 10024 * 10024
-app.config["UPLOAD_EXTENSIONS"] = [".jpg", ".png", ".jpeg"]
+app.config["MAX_CONTENT_LENGTH"] = config.MAX_CONTENT_LENGTH
+app.config["UPLOAD_EXTENSIONS"] = config.UPLOAD_EXTENSIONS
+CORS(
+    app,
+    origins=["*"],
+    methods=["GET", "POST"],
+    allow_headers=["Content-Type"],
+    max_age=["10"],
+)
 
-# Crear una instancia de FirebaseManager
+# Create an instance of FirebaseManager
 firebase_manager = FirebaseManager()
 
 
 # Define the route /evaluate-image/<string:type_analisis>/ that accepts POST requests
-@app.route("/")
-def index():
-    return "<h2>TEST OK</h2>"
-
-
 @app.route("/evaluate-image/<string:type_analisis>/", methods=["POST"])
+@cross_origin()
 def evaluate_image(type_analisis: str):
-    check_request(type_analisis, app.config["UPLOAD_EXTENSIONS"])
-    user_id = request.form["userId"]
+    # Check the request for valid file type and type_analisis
+    check_request(type_analisis)
+
+    auth_header = request.headers.get("Authorization")
+    auth_scheme, auth_token = auth_header.split()
+    start_time = time.time()
+    # Get the parameters
     extract_roi = str(request.args.get("extract_roi"))
     filestr = request.files["file"].read()
-    aditional_info = None
+    user_id = firebase_manager.check_token(auth_token)
 
+    # If no user ID is found, return an error response
+    if user_id is None:
+        return generate_response("ERROR", "NO TOKEN ID VERIFIED")
+    # If extract_roi is true, extract masks from the image
     if extract_roi == "true":
         original_image, drawed_image, data_to_eval = ExtractMasks(
             img_input_file=filestr
         ).get_masks()
+        # If no data is found, return an error response
         if len(data_to_eval) == 0:
-            return jsonify(
-                {
-                    "result": "ERROR",
-                    "aditionalInfo": "NO ROI FOUND",
-                }
-            )
+            return generate_response("ERROR", "NO ROI FOUND")
+    # If extract_roi is not true, set original_image and drawed_image to None and convert the image to a numpy array
     else:
         original_image = drawed_image = None
         data_to_eval = [
@@ -55,44 +64,25 @@ def evaluate_image(type_analisis: str):
                 transform_gray=True
             )
         ]
-
+    # Get predictions for the data using the Predict class
     predictions = Predict(
         list_masks=data_to_eval, type_analisis=type_analisis
     ).get_predictions()
-
-    histId = generate_id(3)
-    collection = f"Users/{user_id}/HistResults"
-    document = histId
-    current_timestamp = datetime.utcnow().strftime("%a, %d %b %Y %H:%M:%S GMT")
-    path = f"results/{user_id}/{histId}/"
-
-    data_doc = {
-        "testResult": "M" if "M" in predictions else "B",
-        "typeAnalysis": type_analisis[0].upper(),
-        "dateAnalysis": current_timestamp,
-        "roiExtracted": False,
-    }
-
+    # Get data routes and images for uploading to Firebase
+    hist_id, path, collection, data_doc = get_data_routes(
+        user_id, predictions, type_analisis
+    )
     images, extra_data = format_data_to_dict(
         extract_roi, path, data_to_eval, original_image, drawed_image
     )
     data_doc.update(extra_data)
-
+    # Upload results to Firebase and get result and additional information
     result, aditional_info = firebase_manager.upload_results(
-        images, collection, document, data_doc
+        start_time, images, collection, hist_id, data_doc
     )
-    print(f"Resultado: {result}")
-
-    json_response = {
-        "result": result,
-        "aditionalInfo": aditional_info,
-        "idResult": histId,
-    }
-    return jsonify(json_response)
+    # Return a response with the result and additional information
+    return generate_response(result, aditional_info, hist_id)
 
 
 if __name__ == "__main__":
-    app.run(
-        debug=True,
-        # ssl_context=("newcertificate.crt", "newkey.key"),
-    )
+    app.run(host="192.168.1.6", port=8000, debug=True)

@@ -16,7 +16,6 @@ class Predict:
         self.device = (
             "cuda" if torch.cuda.is_available() else "cpu"
         )  # Use GPU if available
-        print("device ", self.device)
         self.type_analysis = type_analisis  # Type of analysis to perform
 
     def transform_numpy_to_tensor(self, list_masks: np.ndarray) -> List[torch.Tensor]:
@@ -28,7 +27,6 @@ class Predict:
                 transforms.Normalize([0.5], [0.5]),
             ]
         )
-
         # Apply transformations to each image in the list
         new_x = list(map(lambda x: x.astype("float"), list_masks))
         new_x = list(map(lambda x: np.expand_dims(x, axis=-1), new_x))
@@ -51,7 +49,6 @@ class Predict:
             net_test.eval()
             checkpoint = torch.load(model_dir, map_location=torch.device(self.device))
             net_test.load_state_dict(checkpoint["classifier_state"])
-
             # Make a prediction for the given image
             with torch.no_grad():
                 outputs = model_net(image.unsqueeze(0)).double()
@@ -63,21 +60,18 @@ class Predict:
 
     def get_predictions(self) -> List[str]:
         # Define the path to the model checkpoint based on the type of analysis
-        dir = os.path.join(os.getcwd(), 'models')
+        dir = os.path.join(os.getcwd(), "models")
         if self.type_analysis == "ultrasound":
-            model_dir = os.path.join(dir, 'ultrasound.pth')
+            model_dir = os.path.join(dir, "ultrasound.pth")
         else:
-            model_dir = os.path.join(dir, 'mammography.pth')
-
+            model_dir = os.path.join(dir, "mammography.pth")
         # Define a function to create a convolutional layer with the given number of input and output channels
         layer_conv = lambda x, y: nn.Conv2d(
             in_channels=x, out_channels=y, kernel_size=3, padding=1
         )
-
         # Load a pre-trained ResNet18 model and remove the first and last layers
         model_resnet = models.resnet18(weights="ResNet18_Weights.DEFAULT")
         model_aux = nn.Sequential(*list(model_resnet.children())[1:-1])
-
         # Define a new model using the pre-trained ResNet18 layers and additional layers
         model_tl = nn.Sequential(
             nn.Conv2d(1, 64, kernel_size=7, stride=2, padding=3, bias=False),
@@ -87,10 +81,8 @@ class Predict:
             nn.Flatten(),
             nn.Linear(in_features=1024, out_features=10, bias=True),
         )
-
         # Make predictions for each image in the list
         list_predictions: List[str] = []
         for image in self.transform_numpy_to_tensor(self.list_masks):
             list_predictions.append(self.make_predictions(model_tl, image, model_dir))
-
         return list_predictions
